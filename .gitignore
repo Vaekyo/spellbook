@@ -1,0 +1,9 @@
+node_modules/
+config.json
+spells.json
+data/*
+!data/.gitkeep
+assets/**/*
+!assets/**/
+!assets/README.txt
+!assets/**/.gitkeep

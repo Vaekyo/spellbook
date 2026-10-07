@@ -1,0 +1,25 @@
+[
+  {
+    "id": "lumos", "name": "Lumos", "weight": 20, "minAmount": 5000, "duration": 10,
+    "reveal": "assets/fx/lumos.webm", "sound": "assets/sfx/lumos.mp3",
+    "actions": [ { "type": "overlay_only" } ]
+  },
+  {
+    "id": "reducio_head", "name": "Reducio", "weight": 10, "minAmount": 10000, "duration": 30,
+    "reveal": "assets/fx/reducio.webm", "sound": "assets/sfx/reducio.mp3",
+    "actions": [
+      { "type": "vts_param", "param": "HeadSize", "value": 0.3, "mode": "set" },
+      { "type": "obs_filter", "source": "Camera", "filter": "Monochrome", "enabled": true }
+    ]
+  },
+  {
+    "id": "stupefy", "name": "Stupefy", "weight": 10, "minAmount": 10000, "duration": 20,
+    "reveal": { "src": "assets/fx/stupefy", "fps": 30 },
+    "actions": [ { "type": "overlay_only" } ]
+  },
+  {
+    "id": "patronum", "name": "Expecto Patronum", "exactAmount": 50000, "duration": 45,
+    "reveal": "assets/fx/patronum.webm",
+    "actions": [ { "type": "overlay_only" } ]
+  }
+]

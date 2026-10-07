@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Spellbook Overlay</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; width: 100vw; height: 100vh; overflow: hidden; background: transparent; }
+  body.preview { background: #222 repeating-conic-gradient(#2a2a2a 0 25%, #222 0 50%) 0 0 / 40px 40px; }
+  .layer { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .4s; pointer-events: none; }
+  .layer.show { opacity: 1; }
+  .layer video, .layer img, .layer canvas { width: 100%; height: 100%; object-fit: contain; }
+
+  /* Built-in mystery: glowing orb with a spinning rune ring */
+  #orb { position: relative; width: 26vh; height: 26vh; }
+  #orb::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: .6vh dashed #ffd76a;
+    box-shadow: 0 0 4vh #ffcc4d, inset 0 0 4vh #ffcc4d; animation: spin 3s linear infinite; }
+  #orb::after { content: '?'; position: absolute; inset: 12%; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font: bold 14vh Georgia, serif; color: #fff8dc; text-shadow: 0 0 3vh #ffd76a;
+    background: radial-gradient(circle, #fff6 0, #b47cff88 40%, transparent 70%); animation: pulse .9s ease-in-out infinite alternate; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { from { transform: scale(.9); } to { transform: scale(1.08); } }
+
+  /* Built-in burst when a spell has no reveal asset */
+  .burst { width: 40vh; height: 40vh; border-radius: 50%;
+    background: radial-gradient(circle, #fff 0, #ffe28a 20%, #b47cff66 45%, transparent 70%); animation: burst 1.2s ease-out forwards; }
+  @keyframes burst { from { transform: scale(.1); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
+
+  #card { align-items: flex-end; padding-bottom: 8vh; }
+  #card .box { text-align: center; transform: translateY(2vh) scale(.95); transition: transform .5s; }
+  #card.show .box { transform: none; }
+  #name { font: 700 9vh 'Cinzel Decorative', 'Cinzel', Georgia, serif; color: #ffe9a8; letter-spacing: .05em;
+    text-shadow: 0 0 2vh #ffb800, 0 0 5vh #b47cff, 0 .4vh .4vh #000; }
+  #donor { font: 600 3.6vh Georgia, serif; color: #fff; text-shadow: 0 0 1vh #000, 0 0 2vh #b47cff; margin-top: .5vh; }
+</style>
+</head>
+<body>
+<div id="mystery" class="layer"></div>
+<div id="fx" class="layer"></div>
+<div id="card" class="layer"><div class="box"><div id="name"></div><div id="donor"></div></div></div>
+<script>
+const $ = (id) => document.getElementById(id);
+if (new URLSearchParams(location.search).has('preview')) document.body.classList.add('preview');
+let current = null, timers = [], players = [];
+
+const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+const fill = (tpl, c) => String(tpl || '').replace(/\{(\w+)\}/g, (_, k) => c[k] ?? '');
+
+function reset() {
+  timers.forEach(clearTimeout); timers = [];
+  players.forEach((p) => p.stop()); players = [];
+  for (const id of ['mystery', 'fx', 'card']) $(id).classList.remove('show');
+}
+
+// Creates a player for a resolved media object. onDone fires when a non-looping clip ends.
+function makePlayer(m, volume, onDone) {
+  let el, timer, stop = () => {};
+  if (m.kind === 'video') {
+    el = document.createElement('video');
+    Object.assign(el, { src: m.src, preload: 'auto', loop: !!m.loop, volume, playsInline: true });
+    el.onended = onDone;
+    stop = () => { el.pause(); el.removeAttribute('src'); el.load(); };
+    return { el, stop, play: () => el.play().catch(() => { el.muted = true; el.play().catch(() => {}); }) };
+  }
+  if (m.kind === 'image') {
+    el = document.createElement('img'); el.src = m.src;
+    return { el, stop, play: () => {} };
+  }
+  if (m.kind === 'frames') {
+    el = document.createElement('canvas');
+    const ctx = el.getContext('2d');
+    const imgs = m.frames.map((src) => Object.assign(new Image(), { src }));
+    let i = 0;
+    const draw = () => {
+      const img = imgs[i];
+      if (img.complete && img.naturalWidth) {
+        if (el.width !== img.naturalWidth) { el.width = img.naturalWidth; el.height = img.naturalHeight; }
+        ctx.clearRect(0, 0, el.width, el.height); ctx.drawImage(img, 0, 0);
+      }
+      if (++i >= imgs.length) { if (m.loop) i = 0; else { clearInterval(timer); onDone && onDone(); } }
+    };
+    stop = () => clearInterval(timer);
+    return { el, stop, play: () => { clearInterval(timer); i = 0; draw(); timer = setInterval(draw, 1000 / m.fps); } };
+  }
+  return null;
+}
+
+function show(layerId, node) {
+  const layer = $(layerId);
+  layer.replaceChildren(node);
+  layer.classList.add('show');
+}
+
+function cast(c) {
+  reset();
+  current = c.id;
+  const vol = c.volume ?? 0.8;
+  // Prepare (preload) the reveal effect while the mystery animation plays.
+  const fx = c.reveal && makePlayer(c.reveal, vol, () => $('fx').classList.remove('show'));
+  if (fx) players.push(fx);
+
+  if (c.mysteryMs > 0) {
+    const mp = c.mystery && makePlayer({ ...c.mystery, loop: true }, vol);
+    if (mp) { players.push(mp); show('mystery', mp.el); mp.play(); }
+    else show('mystery', Object.assign(document.createElement('div'), { id: 'orb' }));
+  }
+
+  later(() => {
+    $('mystery').classList.remove('show');
+    if (fx) { show('fx', fx.el); fx.play(); }
+    else { show('fx', Object.assign(document.createElement('div'), { className: 'burst' })); later(() => $('fx').classList.remove('show'), 1200); }
+    if (c.sound) { const a = new Audio(c.sound.src); a.volume = vol; a.play().catch(() => {}); players.push({ stop: () => a.pause() }); }
+    if (c.nameDelay >= 0) later(() => showCard(c.spell.name, fill(c.donorText ?? 'cast by {donor}', c)), c.nameDelay * 1000);
+  }, c.mysteryMs);
+}
+
+function showCard(name, donor) {
+  $('name').textContent = name;
+  $('donor').textContent = donor;
+  $('card').classList.add('show');
+}
+
+function end(id) {
+  if (id !== current) return;
+  current = null;
+  for (const l of ['mystery', 'fx', 'card']) $(l).classList.remove('show');
+  later(reset, 500);
+}
+
+function fizzle(m) {
+  if (current !== null) return; // don't interrupt a running spell
+  showCard('', fill(m.text, m));
+  later(() => $('card').classList.remove('show'), 4000);
+}
+
+(function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws?role=overlay`);
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'cast') cast(m);
+    else if (m.type === 'end') end(m.id);
+    else if (m.type === 'fizzle') fizzle(m);
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+})();
+</script>
+</body>
+</html>
