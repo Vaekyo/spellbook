@@ -24,6 +24,7 @@ const DEFAULTS = {
     fizzleText: '{donor}\'s spell fizzled...',
     volume: 0.8,
   },
+  vts: { enabled: true, host: '127.0.0.1', port: 8001 },
 };
 
 const cfg = new EventEmitter();

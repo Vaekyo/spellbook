@@ -21,8 +21,9 @@ function buildForm(box, defs, data) {
     let c;
     if (type === 'check') c = el('input', { type: 'checkbox', checked: v !== false && v != null ? !!v : false });
     else if (type.startsWith('select:')) c = el('select', {}, ...type.slice(7).split(',').map((o) => el('option', { value: o, textContent: o, selected: o === v })));
-    else c = el('input', { type: type === 'number' ? 'number' : 'text', value: v ?? '', step: 'any' });
+    else c = el('input', { type: type === 'number' ? 'number' : type === 'color' ? 'color' : 'text', value: v ?? '', step: 'any' });
     if (type === 'asset') c.setAttribute('list', 'assetList');
+    if (type.startsWith('pick:')) c.setAttribute('list', 'dl-' + type.slice(5));
     c.dataset.key = key; c.dataset.type = type;
     box.append(type === 'check' ? el('label', { className: 'check' }, c, label) : el('label', {}, label, c));
   }
@@ -131,13 +132,79 @@ function openEditor(i) {
   $('editor').showModal();
 }
 
-// Phase 1: actions edited as JSON. (Replaced by a picker UI once VTS/OBS are connected.)
-function renderActions(box, actions) {
-  box.replaceChildren(
-    el('textarea', { id: 'actionsJson', rows: 8, value: JSON.stringify(actions, null, 2) }),
-    el('div', { className: 'hint', textContent: `Available types: ${(S.actionTypes || []).join(', ')}` }));
+// ---------- action editor ----------
+// fields: [key, type, label, default]
+const ACTIONS = {
+  overlay_only: { label: 'Overlay only (no effect)', fields: [] },
+  vts_param: { label: 'VTS: set parameter', fields: [
+    ['param', 'pick:params', 'Parameter'], ['value', 'number', 'Value', 1],
+    ['mode', 'select:set,add', 'Mode (set = replace, add = add to tracking)', 'set'], ['weight', 'number', 'Weight 0–1 (set mode, empty = 1)']] },
+  vts_tint: { label: 'VTS: tint color', fields: [
+    ['color', 'color', 'Color', '#ff7070'], ['alpha', 'number', 'Alpha 0–255', 255],
+    ['matchBy', 'select:all,nameContains,nameExact,tagContains,tagExact,group', 'Which ArtMeshes', 'all'],
+    ['match', 'pick:tint', 'Names / tags / groups (comma-separated)']] },
+  vts_item: { label: 'VTS: load item (accessory)', fields: [
+    ['file', 'pick:items', 'Item: VTS item, or assets/… image'], ['pinTo', 'pick:artMeshes', 'Pin to ArtMesh (optional)'],
+    ['size', 'number', 'Size 0–1', 0.32], ['x', 'number', 'X (-1 … 1)', 0], ['y', 'number', 'Y (-1 … 1)', 0],
+    ['rotation', 'number', 'Rotation', 0], ['order', 'number', 'Layer order', 10], ['flipped', 'check', 'Flipped']] },
+  vts_move: { label: 'VTS: move / resize model', fields: [
+    ['size', 'number', 'Size -100 … 100 (empty = keep)'], ['x', 'number', 'X (empty = keep)'], ['y', 'number', 'Y (empty = keep)'],
+    ['rotation', 'number', 'Rotation (empty = keep)'], ['relative', 'check', 'Relative to current position'], ['time', 'number', 'Move time in s (0–2)', 0.5]] },
+  vts_hotkey: { label: 'VTS: trigger hotkey', fields: [
+    ['hotkey', 'pick:hotkeys', 'Hotkey'], ['revertHotkey', 'pick:hotkeys', 'Hotkey to trigger at the end (optional)']] },
+  vts_expression: { label: 'VTS: expression on → off', fields: [
+    ['expression', 'pick:expressions', 'Expression'], ['fadeTime', 'number', 'Fade time (s)', 0.25]] },
+};
+
+const strip = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== ''));
+
+function actionRow(a) {
+  const sel = el('select', {}, ...Object.entries(ACTIONS).map(([t, d]) => el('option', { value: t, textContent: d.label })));
+  if (!ACTIONS[a.type]) sel.prepend(el('option', { value: a.type, textContent: a.type + ' (edit as JSON)' }));
+  sel.value = a.type;
+  const body = el('div', { className: 'grid' });
+  const draw = (data) => {
+    const d = ACTIONS[sel.value];
+    if (!d) return body.replaceChildren(el('textarea', { rows: 4, value: JSON.stringify(data, null, 2) }));
+    const defaults = Object.fromEntries(d.fields.filter((f) => f[3] !== undefined).map((f) => [f[0], f[3]]));
+    buildForm(body, d.fields, { ...defaults, ...data });
+  };
+  sel.onchange = () => draw({});
+  draw(a);
+  const row = el('div', { className: 'action' },
+    el('div', { className: 'row' }, sel, el('span', { className: 'grow' }), el('button', { className: 'ghost', textContent: '✕', title: 'Remove action', onclick: () => row.remove() })),
+    body);
+  row.read = () => {
+    if (!ACTIONS[sel.value]) return { ...JSON.parse(body.querySelector('textarea').value || '{}'), type: sel.value };
+    return strip({ ...(sel.value === a.type ? a : {}), ...readForm(body), type: sel.value });
+  };
+  return row;
 }
-function readActions() { return JSON.parse($('actionsJson').value || '[]'); }
+
+function renderActions(box, list) {
+  const rows = el('div', {}, ...list.map(actionRow));
+  box.replaceChildren(rows, el('button', { className: 'ghost', textContent: '+ Add action', onclick: () => rows.append(actionRow({ type: 'vts_param' })) }), el('span', { id: 'vtsHint', className: 'hint' }));
+  loadPickLists();
+}
+function readActions() { return [...$('edActions').querySelectorAll('.action')].map((r) => r.read()); }
+
+// Fill dropdown suggestions from VTube Studio (+ image assets for items).
+async function loadPickLists() {
+  const v = await api('/api/vts/lists').catch(() => ({}));
+  const imgs = assets.filter((a) => /\.(png|jpe?g|gif)$/i.test(a));
+  const fill = (id, items) => {
+    const dl = $('dl-' + id) || document.body.appendChild(el('datalist', { id: 'dl-' + id }));
+    dl.replaceChildren(...[...new Set(items)].map((x) => el('option', { value: x })));
+  };
+  fill('params', v.params || []);
+  fill('artMeshes', v.artMeshes || []);
+  fill('tint', [...(v.artMeshes || []), ...(v.artMeshTags || []), ...(v.groups || [])]);
+  fill('hotkeys', v.hotkeys || []);
+  fill('expressions', v.expressions || []);
+  fill('items', [...(v.items || []), ...imgs]);
+  const hint = $('vtsHint');
+  if (hint) hint.textContent = v.connected ? `  VTube Studio: ${v.model || 'no model'} — click a field to pick from the list` : '  VTube Studio not connected — lists are empty, but you can still type names.';
+}
 
 async function saveEditor() {
   let actions;
@@ -175,6 +242,10 @@ const SETTINGS = [
   ['overlay.donorText', 'text', 'Donor line — {donor} {amount} {message}'],
   ['overlay.fizzleText', 'text', 'No-match text (if noMatch = overlay)'],
   ['overlay.volume', 'number', 'Volume (0 – 1)'],
+  ['VTube Studio'],
+  ['vts.enabled', 'check', 'Connect to VTube Studio'],
+  ['vts.port', 'number', 'VTS API port (default 8001)'],
+  ['vts.host', 'text', 'VTS host (127.0.0.1 = this PC)'],
   ['Server (restart needed)'],
   ['port', 'number', 'Port'],
   ['host', 'text', 'Host (127.0.0.1 = this PC only)'],
@@ -188,5 +259,9 @@ $('edCancel').onclick = () => $('editor').close();
 $('edSave').onclick = saveEditor;
 $('edTest').onclick = async () => { const ok = await saveEditor(); if (ok !== false) test(typeof ok === 'string' ? ok : S.spells[S.spells.length - 1]?.id); };
 $('saveSettings').onclick = async () => { await api('/api/settings', readForm($('settings'))); alert('Settings saved'); };
+$('cpCreate').onclick = async () => {
+  const r = await api('/api/vts/param', { name: $('cpName').value.trim(), min: $('cpMin').value, max: $('cpMax').value, defaultValue: $('cpDef').value });
+  alert(r.ok ? `Parameter "${r.parameterName}" created. Now map it in VTube Studio model settings.` : r.error);
+};
 $('ovUrl').textContent = `${location.origin}/overlay`;
 connect();

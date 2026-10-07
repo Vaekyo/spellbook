@@ -41,6 +41,8 @@
   #log .warn { color: var(--gold); } #log .error { color: var(--bad); }
   dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; width: min(900px, 95vw); padding: 18px; }
   dialog::backdrop { background: #000a; }
+  .action { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; display: grid; gap: 8px; }
+  input[type=color] { padding: 2px; height: 32px; }
   code { background: #120f18; padding: 1px 5px; border-radius: 4px; }
 </style>
 </head>
@@ -79,6 +81,20 @@
   </section>
 
   <section>
+    <h2>VTube Studio: custom parameter</h2>
+    <p class="hint">VTS can only inject <b>tracking</b> parameters. To control something like head size, create a custom parameter here,
+      then in VTube Studio → model settings add a mapping: <i>Input</i> = this parameter, <i>Output</i> = your Live2D parameter.</p>
+    <div class="row">
+      <input id="cpName" placeholder="Name, e.g. SpellHeadSize" style="width:220px">
+      <input id="cpMin" type="number" value="0" style="width:80px" title="min">
+      <input id="cpMax" type="number" value="1" style="width:80px" title="max">
+      <input id="cpDef" type="number" value="0" style="width:80px" title="default">
+      <button id="cpCreate">Create in VTS</button>
+      <span class="hint">min / max / default</span>
+    </div>
+  </section>
+
+  <section>
     <h2>Log</h2>
     <div id="log"></div>
     <p class="hint">OBS overlay: <code id="ovUrl"></code> — add as Browser Source, 1920×1080. Open it with <code>?preview</code> in a normal browser to see it on a dark background.</p>
@@ -88,7 +104,7 @@
 <dialog id="editor">
   <h2 id="edTitle">Edit spell</h2>
   <form id="edForm" class="grid" onsubmit="return false"></form>
-  <h2 style="margin-top:14px">Actions <span class="hint">(run together while the spell is active)</span></h2>
+  <h2 style="margin-top:14px">Actions <span class="hint">(all run together while the spell is active, then revert)</span></h2>
   <div id="edActions"></div>
   <div id="edErrors" class="errors"></div>
   <div class="row" style="margin-top:14px">

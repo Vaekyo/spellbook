@@ -8,7 +8,8 @@
     "id": "reducio_head", "name": "Reducio", "weight": 10, "minAmount": 10000, "duration": 30,
     "reveal": "assets/fx/reducio.webm", "sound": "assets/sfx/reducio.mp3",
     "actions": [
-      { "type": "vts_param", "param": "HeadSize", "value": 0.3, "mode": "set" },
+      { "type": "vts_param", "param": "SpellHeadSize", "value": 0.3, "mode": "set" },
+      { "type": "vts_move", "size": -60, "time": 0.5 },
       { "type": "obs_filter", "source": "Camera", "filter": "Monochrome", "enabled": true }
     ]
   },
