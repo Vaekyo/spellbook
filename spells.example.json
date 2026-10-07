@@ -1,26 +1,8 @@
 [
-  {
-    "id": "lumos", "name": "Lumos", "weight": 20, "minAmount": 5000, "duration": 10,
-    "reveal": "assets/fx/lumos.webm", "sound": "assets/sfx/lumos.mp3",
-    "actions": [ { "type": "overlay_only" } ]
-  },
-  {
-    "id": "reducio_head", "name": "Reducio", "weight": 10, "minAmount": 10000, "duration": 30,
-    "reveal": "assets/fx/reducio.webm", "sound": "assets/sfx/reducio.mp3",
-    "actions": [
-      { "type": "vts_param", "param": "SpellHeadSize", "value": 0.3, "mode": "set" },
-      { "type": "vts_move", "size": -60, "time": 0.5 },
-      { "type": "obs_filter", "source": "Camera", "filter": "Monochrome", "enabled": true }
-    ]
-  },
-  {
-    "id": "stupefy", "name": "Stupefy", "weight": 10, "minAmount": 10000, "duration": 20,
-    "reveal": { "src": "assets/fx/stupefy", "fps": 30 },
-    "actions": [ { "type": "overlay_only" } ]
-  },
-  {
-    "id": "patronum", "name": "Expecto Patronum", "exactAmount": 50000, "duration": 45,
-    "reveal": "assets/fx/patronum.webm",
-    "actions": [ { "type": "overlay_only" } ]
-  }
+  {"id": "lumos", "name": "Lumos", "weight": 20, "minAmount": 5000, "duration": 10, "reveal": "assets/fx/lumos.webm", "sound": "assets/sfx/lumos.mp3", "actions": [{"type": "overlay_only"}]},
+  {"id": "reducio_head", "name": "Reducio", "weight": 10, "minAmount": 10000, "duration": 30, "reveal": "assets/fx/reducio.webm", "sound": "assets/sfx/reducio.mp3", "actions": [{"type": "vts_param", "param": "SpellHeadSize", "value": 0.3, "mode": "set"}, {"type": "vts_move", "size": -60, "time": 0.5}, {"type": "obs_filter", "source": "Camera", "filter": "Monochrome", "enabled": true}]},
+  {"id": "stupefy", "name": "Stupefy", "weight": 10, "minAmount": 10000, "duration": 20, "reveal": {"src": "assets/fx/stupefy", "fps": 30}, "actions": [{"type": "overlay_only"}]},
+  {"id": "petrificus", "name": "Petrificus Totalus", "weight": 8, "minAmount": 15000, "duration": 20, "actions": [{"type": "key_block", "keys": "space"}]},
+  {"id": "confundus", "name": "Confundus", "weight": 8, "minAmount": 15000, "duration": 20, "actions": [{"type": "key_swap", "pairs": "w=s, a=d"}]},
+  {"id": "patronum", "name": "Expecto Patronum", "exactAmount": 50000, "duration": 45, "reveal": "assets/fx/patronum.webm", "actions": [{"type": "overlay_only"}]}
 ]

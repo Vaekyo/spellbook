@@ -25,6 +25,7 @@ const DEFAULTS = {
     volume: 0.8,
   },
   vts: { enabled: true, host: '127.0.0.1', port: 8001 },
+  keyboard: { enabled: true, maxSeconds: 120 }, // keyboard spells never last longer than maxSeconds
 };
 
 const cfg = new EventEmitter();

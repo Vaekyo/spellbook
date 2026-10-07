@@ -9,6 +9,7 @@ const media = require('./src/media');
 const actions = require('./src/actions');
 const status = require('./src/status');
 const vts = require('./src/vts');
+const keyboard = require('./src/keyboard');
 const log = require('./src/log');
 
 const ROOT = __dirname;
@@ -62,7 +63,7 @@ function serveFile(req, res, abs) {
 
 function stateFor(full) {
   const s = { type: 'state', status: status.all, overlays: overlayCount(), ...engine.snapshot() };
-  if (full) Object.assign(s, { settings: config.settings, spells: config.spells, errors: config.errors, log: log.lines, actionTypes: actions.types() });
+  if (full) Object.assign(s, { settings: config.settings, spells: config.spells, errors: config.errors, log: log.lines, actionTypes: actions.types(), keyNames: keyboard.keyNames });
   return s;
 }
 
@@ -149,6 +150,7 @@ config.on('change', () => broadcast({ type: 'config' }, 'dashboard'));
 // ---- start ----
 config.load();
 config.watch();
+keyboard.init();
 const { host, port } = config.settings;
 server.on('error', (e) => {
   log.error(e.code === 'EADDRINUSE' ? `Port ${port} is already in use. Is Spellbook already running?` : e.message);

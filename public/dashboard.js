@@ -154,6 +154,14 @@ const ACTIONS = {
     ['hotkey', 'pick:hotkeys', 'Hotkey'], ['revertHotkey', 'pick:hotkeys', 'Hotkey to trigger at the end (optional)']] },
   vts_expression: { label: 'VTS: expression on → off', fields: [
     ['expression', 'pick:expressions', 'Expression'], ['fadeTime', 'number', 'Fade time (s)', 0.25]] },
+  key_block: { label: 'Keyboard: block keys', fields: [
+    ['keys', 'pick:keys', 'Keys to disable (comma-separated, e.g. space, w)', 'space']] },
+  key_swap: { label: 'Keyboard: swap keys', fields: [
+    ['pairs', 'text', 'Pairs to swap, e.g. w=s, a=d', 'w=s, a=d']] },
+  key_press: { label: 'Keyboard: press / hold key', fields: [
+    ['key', 'pick:keys', 'Key or shortcut (e.g. space, w, cmd+shift+a)', 'space'],
+    ['mode', 'select:tap,hold,repeat', 'tap = once, hold = whole spell, repeat = every N s', 'tap'],
+    ['interval', 'number', 'Repeat every (seconds)', 1]] },
 };
 
 const strip = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined && v !== ''));
@@ -202,6 +210,7 @@ async function loadPickLists() {
   fill('hotkeys', v.hotkeys || []);
   fill('expressions', v.expressions || []);
   fill('items', [...(v.items || []), ...imgs]);
+  fill('keys', S.keyNames || []);
   const hint = $('vtsHint');
   if (hint) hint.textContent = v.connected ? `  VTube Studio: ${v.model || 'no model'} — click a field to pick from the list` : '  VTube Studio not connected — lists are empty, but you can still type names.';
 }
@@ -246,6 +255,9 @@ const SETTINGS = [
   ['vts.enabled', 'check', 'Connect to VTube Studio'],
   ['vts.port', 'number', 'VTS API port (default 8001)'],
   ['vts.host', 'text', 'VTS host (127.0.0.1 = this PC)'],
+  ['Keyboard spells (macOS)'],
+  ['keyboard.enabled', 'check', 'Allow keyboard spells'],
+  ['keyboard.maxSeconds', 'number', 'Keyboard effects last at most (seconds)'],
   ['Server (restart needed)'],
   ['port', 'number', 'Port'],
   ['host', 'text', 'Host (127.0.0.1 = this PC only)'],
