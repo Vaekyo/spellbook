@@ -13,10 +13,20 @@ let assets = [];
 const getPath = (o, p) => p.split('.').reduce((v, k) => v?.[k], o);
 function setPath(o, p, v) { const ks = p.split('.'); const last = ks.pop(); ks.reduce((x, k) => (x[k] ??= {}), o)[last] = v; }
 
-function buildForm(box, defs, data) {
+// Labels like "Name (hint)" or "Name — hint" show the hint as small grey text.
+function labelEl(label) {
+  const m = /^(.*?)\s*(?:\((.*)\)|—\s*(.*))$/.exec(label);
+  return m ? el('span', {}, m[1], el('small', { textContent: m[2] || m[3] })) : el('span', { textContent: label });
+}
+
+// Builds iOS-style grouped rows. flat = append rows straight into box (no section groups).
+function buildForm(box, defs, data, flat) {
   box.replaceChildren();
+  let group = flat ? box : null;
+  const section = (title) => { if (title) box.append(el('div', { className: 'sec', textContent: title })); group = box.appendChild(el('div', { className: 'group' })); };
   for (const [key, type, label] of defs) {
-    if (!type) { box.append(el('div', { className: 'sub', textContent: key })); continue; }
+    if (!type) { if (!flat) section(key); continue; }
+    if (!group) section();
     const v = getPath(data, key);
     let c;
     if (type === 'check') c = el('input', { type: 'checkbox', checked: v !== false && v != null ? !!v : false });
@@ -25,7 +35,7 @@ function buildForm(box, defs, data) {
     if (type === 'asset') c.setAttribute('list', 'assetList');
     if (type.startsWith('pick:')) c.setAttribute('list', 'dl-' + type.slice(5));
     c.dataset.key = key; c.dataset.type = type;
-    box.append(type === 'check' ? el('label', { className: 'check' }, c, label) : el('label', {}, label, c));
+    group.append(el('label', { className: 'field' + (type === 'check' ? ' check' : '') }, labelEl(label), c));
   }
 }
 
@@ -41,17 +51,25 @@ function readForm(box) {
 
 // ---------- status / live ----------
 function renderStatus() {
-  const pills = [el('span', { className: 'pill ' + (S.overlays ? 'ok' : 'bad'), textContent: `Overlay: ${S.overlays || 0}` })];
-  for (const [name, s] of Object.entries(S.status || {})) pills.push(el('span', { className: 'pill ' + (s.ok ? 'ok' : 'bad'), title: s.text || '', textContent: `${name}: ${s.text || (s.ok ? 'connected' : 'offline')}` }));
-  $('status').replaceChildren(...pills);
+  const dot = (name, ok, text) => el('span', { className: 'dot ' + (ok ? 'ok' : 'bad'), title: `${name}: ${text}` }, el('span', { className: 'lbl', textContent: name }));
+  $('status').replaceChildren(
+    dot('Overlay', S.overlays > 0, S.overlays ? `${S.overlays} connected` : 'not open in OBS'),
+    ...Object.entries(S.status || {}).map(([name, s]) => dot(name, s.ok, s.text || (s.ok ? 'connected' : 'offline'))));
   const c = S.current;
-  $('now').textContent = (c ? `Casting: ${c.spell} (${c.donor})` : 'Idle') + (S.queue?.length ? ` · ${S.queue.length} in queue` : '');
+  $('now').textContent = (c ? `✦ Casting ${c.spell} · ${c.donor}` : 'Idle') + (S.queue?.length ? ` · ${S.queue.length} queued` : '');
+}
+
+let toastTimer;
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg; t.className = 'on' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.className = ''; }, 2600);
 }
 
 function addLog(line) {
   const box = $('log');
   const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 5;
-  box.append(el('div', { className: line.level, textContent: `${new Date(line.t).toLocaleTimeString()}  ${line.msg}` }));
+  box.append(el('div', { className: line.level }, el('time', { textContent: new Date(line.t).toLocaleTimeString() }), line.msg));
   while (box.childElementCount > 150) box.firstChild.remove();
   if (stick) box.scrollTop = box.scrollHeight;
 }
@@ -76,41 +94,52 @@ function connect() {
     else if (m.type === 'config' && !$('editor').open) refresh();
   };
   ws.onopen = refresh;
-  ws.onclose = () => { $('status').replaceChildren(el('span', { className: 'pill bad', textContent: 'Server offline' })); setTimeout(connect, 2000); };
+  ws.onclose = () => { $('status').replaceChildren(el('span', { className: 'dot bad', textContent: 'Spellbook offline' })); setTimeout(connect, 2000); };
 }
 
 // ---------- spells ----------
+const fmt = (n) => Number(n).toLocaleString('id-ID');
+const TAGS = { vts: 'VTS', obs: 'OBS', key: 'Keyboard', streamerbot: 'Streamer.bot' };
 function renderSpells() {
-  const amount = (s) => s.exactAmount != null ? `= ${s.exactAmount}` : `${s.minAmount}${s.maxAmount != null ? ' – ' + s.maxAmount : '+'}`;
-  $('spells').replaceChildren(...S.spells.map((s, i) => el('tr', { className: s.enabled ? '' : 'off' },
-    el('td', { textContent: s.name }),
-    el('td', {}, el('code', { textContent: s.id })),
-    el('td', { textContent: s.weight }),
-    el('td', { textContent: amount(s) }),
-    el('td', { textContent: s.duration + 's' }),
-    el('td', { className: 'hint', textContent: s.actions.map((a) => a.type).join(', ') || '—' }),
-    el('td', { className: 'act' },
-      el('button', { textContent: '▶ Test', onclick: () => test(s.id) }), ' ',
-      el('button', { className: 'ghost', textContent: 'Edit', onclick: () => openEditor(i) }), ' ',
-      el('button', { className: 'ghost', textContent: '✕', title: 'Delete', onclick: () => del(i) })),
-  )));
+  const amount = (s) => s.exactAmount != null ? `exactly ${fmt(s.exactAmount)}` : `${fmt(s.minAmount)}${s.maxAmount != null ? ' – ' + fmt(s.maxAmount) : '+'}`;
+  const ICONS = [['#ff9f0a', '#ff375f'], ['#5e5ce6', '#bf5af2'], ['#0a84ff', '#64d2ff'], ['#30d158', '#66d4cf'],
+    ['#ff375f', '#bf5af2'], ['#ffd60a', '#ff9f0a'], ['#64d2ff', '#5e5ce6'], ['#ff6482', '#ff9f0a']];
+  const pick = (id) => ICONS[[...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % ICONS.length];
+  $('spellCount').textContent = `${S.spells.length} spells · ${S.spells.filter((s) => s.enabled).length} enabled`;
+  if (!S.spells.length) return $('spells').replaceChildren(el('div', { className: 'empty', textContent: 'No spells yet. Click "New Spell" to create one.' }));
+  $('spells').replaceChildren(...S.spells.map((s, i) => {
+    const [c1, c2] = pick(s.id);
+    const tags = [...new Set(s.actions.map((a) => TAGS[a.type.split('_')[0]]).filter(Boolean))];
+    const sw = el('input', { type: 'checkbox', checked: s.enabled, title: 'Enabled for random casts', onclick: (e) => e.stopPropagation(),
+      onchange: () => saveSpells(S.spells.map((x, j) => (j === i ? { ...x, enabled: sw.checked } : x))) });
+    return el('div', { className: 'spell' + (s.enabled ? '' : ' off'), onclick: () => openEditor(i) },
+      el('div', { className: 'icon', style: `background:linear-gradient(135deg,${c1},${c2})`, textContent: s.name.trim()[0]?.toUpperCase() || '✦' }),
+      el('div', { className: 'info' }, el('b', { textContent: s.name }),
+        el('div', { className: 'meta' }, `${amount(s)} · ${s.duration}s · weight ${s.weight}`, ...tags.map((t) => el('span', { className: 'tag', textContent: t })))),
+      el('button', { className: 'btn sm', textContent: 'Test', onclick: (e) => { e.stopPropagation(); test(s.id); } }),
+      sw,
+      el('span', { className: 'chev', textContent: '›' }));
+  }));
 }
 
 const test = (spellId) => api('/api/test', { spellId, donor: $('tDonor').value, amount: Number($('tAmount').value) || 0 })
-  .then((r) => !r.ok && alert(r.error));
+  .then((r) => (r.ok ? toast('Casting…') : toast(r.error, true)));
 
 const SPELL_FIELDS = [
+  ['Spell'],
   ['name', 'text', 'Name (shown on overlay)'],
   ['id', 'text', 'ID (used by /cast?spellId=...)'],
   ['enabled', 'check', 'Enabled (can be picked randomly)'],
+  ['Who can get it'],
   ['weight', 'number', 'Weight (higher = more often)'],
   ['minAmount', 'number', 'Min amount'],
   ['maxAmount', 'number', 'Max amount (empty = no limit)'],
   ['exactAmount', 'number', 'Exact amount only (empty = off)'],
+  ['Timing'],
   ['duration', 'number', 'Duration in seconds (then revert)'],
-  ['nameDelay', 'number', 'Show name after s (empty = default, -1 = never)'],
+  ['nameDelay', 'number', 'Show name after (seconds; empty = default, -1 = never)'],
   ['Reveal effect'],
-  ['revealSrc', 'asset', 'Effect: .webm / .png / PNG-sequence folder'],
+  ['revealSrc', 'asset', 'Effect file (.webm, .png or a PNG-sequence folder)'],
   ['revealFps', 'number', 'PNG sequence FPS (default 30)'],
   ['revealLoop', 'check', 'Loop effect for the whole duration'],
   ['sound', 'asset', 'Sound (.mp3 / .ogg / .wav)'],
@@ -125,7 +154,8 @@ function openEditor(i) {
   const s = i >= 0 ? S.spells[i] : { name: 'New Spell', enabled: true, weight: 10, minAmount: 0, duration: 15, actions: [] };
   const r = s.reveal;
   const data = { ...s, revealSrc: typeof r === 'string' ? r : r?.src || r?.frames || '', revealFps: r?.fps ?? null, revealLoop: !!r?.loop };
-  $('edTitle').textContent = i >= 0 ? `Edit: ${s.name}` : 'New spell';
+  $('edTitle').textContent = i >= 0 ? s.name : 'New Spell';
+  $('edDelete').style.display = i >= 0 ? '' : 'none';
   buildForm($('edForm'), SPELL_FIELDS, data);
   renderActions($('edActions'), s.actions || []);
   $('edErrors').textContent = '';
@@ -170,17 +200,17 @@ function actionRow(a) {
   const sel = el('select', {}, ...Object.entries(ACTIONS).map(([t, d]) => el('option', { value: t, textContent: d.label })));
   if (!ACTIONS[a.type]) sel.prepend(el('option', { value: a.type, textContent: a.type + ' (edit as JSON)' }));
   sel.value = a.type;
-  const body = el('div', { className: 'grid' });
+  const body = el('div');
   const draw = (data) => {
     const d = ACTIONS[sel.value];
-    if (!d) return body.replaceChildren(el('textarea', { rows: 4, value: JSON.stringify(data, null, 2) }));
+    if (!d) return body.replaceChildren(el('div', { className: 'field' }, el('textarea', { rows: 4, value: JSON.stringify(data, null, 2) })));
     const defaults = Object.fromEntries(d.fields.filter((f) => f[3] !== undefined).map((f) => [f[0], f[3]]));
-    buildForm(body, d.fields, { ...defaults, ...data });
+    buildForm(body, d.fields, { ...defaults, ...data }, true);
   };
   sel.onchange = () => draw({});
   draw(a);
-  const row = el('div', { className: 'action' },
-    el('div', { className: 'row' }, sel, el('span', { className: 'grow' }), el('button', { className: 'ghost', textContent: '✕', title: 'Remove action', onclick: () => row.remove() })),
+  const row = el('div', { className: 'group action' },
+    el('div', { className: 'field head' }, sel, el('button', { type: 'button', className: 'remove', textContent: 'Remove', onclick: () => row.remove() })),
     body);
   row.read = () => {
     if (!ACTIONS[sel.value]) return { ...JSON.parse(body.querySelector('textarea').value || '{}'), type: sel.value };
@@ -191,7 +221,9 @@ function actionRow(a) {
 
 function renderActions(box, list) {
   const rows = el('div', {}, ...list.map(actionRow));
-  box.replaceChildren(rows, el('button', { className: 'ghost', textContent: '+ Add action', onclick: () => rows.append(actionRow({ type: 'vts_param' })) }), el('span', { id: 'vtsHint', className: 'hint' }));
+  box.replaceChildren(rows,
+    el('div', { className: 'sheetfoot', style: 'margin-top:8px' }, el('button', { type: 'button', className: 'btn sm', textContent: '+ Add Action', onclick: () => rows.append(actionRow({ type: 'vts_param' })) })),
+    el('p', { id: 'vtsHint', className: 'note' }));
   loadPickLists();
 }
 function readActions() { return [...$('edActions').querySelectorAll('.action')].map((r) => r.read()); }
@@ -212,7 +244,7 @@ async function loadPickLists() {
   fill('items', [...(v.items || []), ...imgs]);
   fill('keys', S.keyNames || []);
   const hint = $('vtsHint');
-  if (hint) hint.textContent = v.connected ? `  VTube Studio: ${v.model || 'no model'} — click a field to pick from the list` : '  VTube Studio not connected — lists are empty, but you can still type names.';
+  if (hint) hint.textContent = v.connected ? `VTube Studio connected (${v.model || 'no model'}). Click a field to pick from the list.` : 'VTube Studio not connected. Lists are empty, but you can still type names.';
 }
 
 async function saveEditor() {
@@ -227,6 +259,7 @@ async function saveEditor() {
   const r = await saveSpells(list);
   if (!r.ok) { $('edErrors').textContent = r.errors.join('\n'); return false; }
   $('editor').close();
+  toast('Saved');
   await refresh();
   return spell.id || list.length - 1;
 }
@@ -234,7 +267,10 @@ async function saveEditor() {
 async function del(i) {
   if (!confirm(`Delete spell "${S.spells[i].name}"?`)) return;
   const r = await saveSpells(S.spells.filter((_, j) => j !== i));
-  if (!r.ok) alert(r.errors.join('\n'));
+  if (!r.ok) return toast(r.errors.join(', '), true);
+  $('editor').close();
+  toast('Spell deleted');
+  await refresh();
 }
 
 // ---------- settings ----------
@@ -247,7 +283,7 @@ const SETTINGS = [
   ['Overlay'],
   ['overlay.mystery', 'asset', 'Mystery animation (empty = built-in)'],
   ['overlay.mysteryDuration', 'number', 'Mystery animation length (seconds)'],
-  ['overlay.nameDelay', 'number', 'Show spell name after (s, -1 = never)'],
+  ['overlay.nameDelay', 'number', 'Show spell name after (seconds, -1 = never)'],
   ['overlay.donorText', 'text', 'Donor line — {donor} {amount} {message}'],
   ['overlay.fizzleText', 'text', 'No-match text (if noMatch = overlay)'],
   ['overlay.volume', 'number', 'Volume (0 – 1)'],
@@ -264,16 +300,26 @@ const SETTINGS = [
 ];
 
 // ---------- wire up ----------
-$('stop').onclick = () => api('/api/stop', {});
-$('random').onclick = () => api('/api/test', { donor: $('tDonor').value, amount: Number($('tAmount').value) || 0 }).then((r) => !r.ok && alert(r.error));
+$('random').onclick = () => api('/api/test', { donor: $('tDonor').value, amount: Number($('tAmount').value) || 0 }).then((r) => (r.ok ? toast('Casting…') : toast(r.error, true)));
+$('stop').onclick = () => api('/api/stop', {}).then(() => toast('Stopped and reverted'));
+$('edDelete').onclick = () => del(editIndex);
+for (const b of document.querySelectorAll('#tabs button')) {
+  b.onclick = () => {
+    document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.page').forEach((p) => p.classList.toggle('on', p.id === 'page-' + b.dataset.page));
+    if (b.dataset.page === 'log') $('log').scrollTop = $('log').scrollHeight;
+  };
+}
 $('add').onclick = () => openEditor(-1);
 $('edCancel').onclick = () => $('editor').close();
 $('edSave').onclick = saveEditor;
 $('edTest').onclick = async () => { const ok = await saveEditor(); if (ok !== false) test(typeof ok === 'string' ? ok : S.spells[S.spells.length - 1]?.id); };
-$('saveSettings').onclick = async () => { await api('/api/settings', readForm($('settings'))); alert('Settings saved'); };
+$('saveSettings').onclick = async () => { await api('/api/settings', readForm($('settings'))); toast('Settings saved'); };
 $('cpCreate').onclick = async () => {
   const r = await api('/api/vts/param', { name: $('cpName').value.trim(), min: $('cpMin').value, max: $('cpMax').value, defaultValue: $('cpDef').value });
-  alert(r.ok ? `Parameter "${r.parameterName}" created. Now map it in VTube Studio model settings.` : r.error);
+  toast(r.ok ? `"${r.parameterName}" created. Now map it in VTube Studio.` : r.error, !r.ok);
 };
 $('ovUrl').textContent = `${location.origin}/overlay`;
+$('ovPreview').href = '/overlay?preview';
+$('copyOv').onclick = () => navigator.clipboard.writeText($('ovUrl').textContent).then(() => toast('Copied'), () => toast('Copy failed, select the text instead', true));
 connect();
