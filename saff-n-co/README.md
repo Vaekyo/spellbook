@@ -18,7 +18,13 @@ Alternatif 01 is the chosen one because it carries all three meanings:
 - The top loop and the right puff read as "S".
 
 ## Ronde 4: 4 colour alternatives (`Logo_Color_Alternatives_A4`)
-Alternatif 01 is used in every version, with the exact same geometry; only the colours change. The S strokes take the main colour, the cloud bowl takes the soft colour, and the logotype takes the ink colour.
+Alternatif 01 is used in every version, with the exact same geometry; only the colours change. Each scheme uses two colours only: a deep ink for the whole logo and a soft background in the same colour family. Each quadrant shows:
+- the full logo on the background colour
+- a reversed tile (background colour on ink)
+- the symbol on white
+- two colour chips
+
+The colour logo SVGs keep the background on its own `background` layer. Delete that layer for a transparent logo.
 
 ## Files
 - `exports/pdf/` contains both A4 boards. Print them at 100%.

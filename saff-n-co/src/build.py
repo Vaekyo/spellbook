@@ -46,22 +46,14 @@ NOTES = {
     4: "One line draws the cloud and curls into an inner S; dot = scent drop.",
 }
 
-# code, name, mood, swatches [(name, hex)]: 0 = S strokes, 1 = bowl, 2 = tint, 3 = ink/logotype
+# Two-colour schemes: (code, name, mood, ink, ground). The whole logo is drawn in
+# ink; ground is its paired background. Tone-on-tone pairs keep it soft but legible.
 PALETTES = [
-    ("A", "Airy Light Blue", "Fresh, airy, clean, soft premium",
-     [("Deep Sky", "#3E7CB1"), ("Cloud Blue", "#7DB8E3"), ("Mist", "#EAF4FB"), ("Ink Navy", "#1F3A56")]),
-    ("B", "Soft Neutral Premium", "Elegant, minimal, premium fragrance",
-     [("Taupe", "#8C7766"), ("Sand", "#C9B39C"), ("Ivory", "#F6F1E9"), ("Espresso", "#3F3631")]),
-    ("C", "Modern Youthful Premium", "Gen Z, stylish, modern, fresh",
-     [("Periwinkle", "#6F7FD6"), ("Dusty Lavender", "#ADA0DB"), ("Lilac Mist", "#F1EEFA"), ("Blue Gray", "#444C6B")]),
-    ("D", "Fresh Luxe Accent", "Clean, elevated, slightly distinctive",
-     [("Deep Teal", "#3F7A72"), ("Sage", "#93B49B"), ("Silver Blue", "#E6EFF0"), ("Pine", "#24433F")]),
+    ("A", "Airy Light Blue", "Fresh, airy, clean, soft premium", "#34587F", "#DDEBF6"),
+    ("B", "Soft Neutral Premium", "Elegant, minimal, premium fragrance", "#6E5848", "#F2E9DD"),
+    ("C", "Modern Youthful Premium", "Gen Z, stylish, modern, fresh", "#4C478A", "#E5E0F4"),
+    ("D", "Fresh Luxe Accent", "Clean, elevated, slightly distinctive", "#2F5E57", "#DCE9E1"),
 ]
-
-
-def palette_fills(sw):
-    # the S (top loop + right puff) takes the main colour, the cloud bowl the soft one
-    return {"loop": sw[0][1], "puff": sw[0][1], "bowl": sw[1][1]}
 
 
 # ---------------------------------------------------------------- text
@@ -207,26 +199,30 @@ def alternatives_page():
 
 def color_page():
     body = ""
-    for (i, x, y), (code, name, mood, sw) in zip(cells(), PALETTES):
+    c = sym.CHOSEN
+    for (i, x, y), (code, name, mood, ink, ground) in zip(cells(), PALETTES):
         cx = x + CW / 2
-        fills = palette_fills(sw)
         body += text(f"COLOR {code}  /  {name.upper()}", x + 7, y + 10, "semi", 3.0, track=0.1)
         body += text(mood, x + 7, y + 15, "light", 2.5, GREY)
-        body += symbol_group(sym.CHOSEN, cx, y + 20, 30, 50, fills)
-        body += f'<rect x="{x + 8}" y="{y + 55}" width="{CW - 16}" height="32" rx="2" fill="{sw[2][1]}"/>'
-        g, _, _ = lockup(sym.CHOSEN, cx, y + 59.5, 18, fills, sw[3][1])
+        # main: full lockup in ink on its ground
+        body += f'<rect x="{x + 8}" y="{y + 20}" width="{CW - 16}" height="60" rx="2" fill="{ground}"/>'
+        g, _, _ = lockup(c, cx, y + 31, 27, solid(ink), ink)
         body += g
-        n, gap = len(sw), 2.5
-        w = (CW - 16 - gap * (n - 1)) / n
-        for k, (sname, hx) in enumerate(sw):
-            sx = x + 8 + k * (w + gap)
-            body += (f'<rect x="{sx:.2f}" y="{y + 92}" width="{w:.2f}" height="9" rx="1" fill="{hx}" '
-                     f'stroke="{LINE}" stroke-width="0.15"/>')
-            body += text(hx.upper(), sx, y + 105.5, "med", 2.3, "#222", track=0.04)
-            body += text(sname, sx, y + 109.3, "light", 2.0, GREY)
+        # row: reversed symbol, symbol on white, two plain colour chips
+        tw, gap, ty, th = (CW - 16 - 6) / 3, 3, y + 84, 24
+        tx = [x + 8 + k * (tw + gap) for k in range(3)]
+        body += f'<rect x="{tx[0]:.2f}" y="{ty}" width="{tw:.2f}" height="{th}" rx="2" fill="{ink}"/>'
+        body += symbol_group(c, tx[0] + tw / 2, ty + 4, th - 8, tw - 6, solid(ground))
+        body += (f'<rect x="{tx[1]:.2f}" y="{ty}" width="{tw:.2f}" height="{th}" rx="2" fill="#fff" '
+                 f'stroke="{LINE}" stroke-width="0.2"/>')
+        body += symbol_group(c, tx[1] + tw / 2, ty + 4, th - 8, tw - 6, solid(ink))
+        chip = 8
+        for k, col in enumerate((ink, ground)):
+            body += (f'<rect x="{tx[2] + tw / 2 - chip - 1 + k * (chip + 2):.2f}" y="{ty + (th - chip) / 2}" '
+                     f'width="{chip}" height="{chip}" rx="{chip / 2}" fill="{col}" stroke="{LINE}" stroke-width="0.15"/>')
     return page(body, "Ronde 4  /  4 Alternatif Warna + Skema Warna Logo Digital",
-                "LOGO TERPILIH: ALTERNATIF 01  /  CLOUD AMPERSAND",
-                "Same final geometry in every version; only colour changes.")
+                "LOGO TERPILIH: ALTERNATIF 01  /  2 WARNA PER ALTERNATIF",
+                "Same final geometry in every version; each scheme uses two colours only.")
 
 
 def logo_file(sid, fills, ink, symbol_only=False, bg=None):
@@ -241,7 +237,9 @@ def logo_file(sid, fills, ink, symbol_only=False, bg=None):
         g, h_box, w_box = lockup(sid, 0, 0, h, fills, ink, gid=True)
         top_off = 0
     vx, vy, vw, vh = -w_box / 2 - pad, top_off - pad, w_box + 2 * pad, h_box + 2 * pad
-    r = f'<rect x="{vx:.2f}" y="{vy:.2f}" width="{vw:.2f}" height="{vh:.2f}" fill="{bg}"/>' if bg else ""
+    # background sits on its own named layer so it can be deleted for a transparent logo
+    r = (f'<rect id="background" x="{vx:.2f}" y="{vy:.2f}" width="{vw:.2f}" height="{vh:.2f}" fill="{bg}"/>'
+         if bg else "")
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{vx:.2f} {vy:.2f} {vw:.2f} {vh:.2f}" '
             f'width="{vw:.0f}" height="{vh:.0f}"><title>Saff n Co</title>{r}{g}</svg>')
 
@@ -267,8 +265,8 @@ def main():
         "Logo_Symbol_Black": logo_file(c, solid("#000"), "#000", symbol_only=True),
         "Logo_Symbol_White": logo_file(c, solid("#fff"), "#fff", symbol_only=True),
     }
-    for code, name, _, sw in PALETTES:
-        files[f"Logo_Color_{code}_{name.replace(' ', '')}"] = logo_file(c, palette_fills(sw), sw[3][1])
+    for code, name, _, ink, ground in PALETTES:
+        files[f"Logo_Color_{code}_{name.replace(' ', '')}"] = logo_file(c, solid(ink), ink, bg=ground)
     for sid, spec in sym.SYMBOLS.items():
         files[f"Alt0{sid}_{spec['name'].replace(' ', '')}_Black"] = logo_file(sid, solid("#000"), "#000")
     for name, svg in files.items():
