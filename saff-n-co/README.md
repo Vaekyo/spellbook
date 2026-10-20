@@ -1,21 +1,40 @@
-# Saff n Co: logo refinement
+# Saff n Co: logo development
 
-Rebranding project for Saff n Co, a perfume brand. The symbol is three calligraphic strokes traced from the pencil sketch:
+Rebranding project for Saff n Co, a perfume brand. The concept is a cloud (awan), with an ampersand "&" and the initial "S" hidden in the mark.
 
-- **Cloud / awan.** The three puffs form the cloud silhouette.
-- **S.** The top arc and the right bowl read as one "S".
-- **&.** The bowl's tail tucks into the left puff, so the loops cross like an ampersand.
+## Ronde 2: 4 alternatives in black and white (`Logo_Refinement_A4`)
+Four directions, each digitised as symbol + logotype. Each one sits next to its pencil sketch.
 
-The final stage adds droplet terminals on the inner curls, as a nod to perfume drops.
+| # | Direction | Source |
+|---|---|---|
+| 01 | **Cloud Ampersand** (chosen) | pencil sketch "SAFF & CO" |
+| 02 | Auspicious Cloud Ribbon | pencil sketch "Sepp & co" |
+| 03 | Spiral S Wisp | pencil sketch "Saffco" |
+| 04 | Monoline Cloud Loop | new digital direction, added to make four |
+
+Alternatif 01 is the chosen one because it carries all three meanings:
+- The three puffs form the cloud.
+- The top loop and the big bowl read as "&".
+- The top loop and the right puff read as "S".
+
+## Ronde 4: 4 colour alternatives (`Logo_Color_Alternatives_A4`)
+Alternatif 01 is used in every version, with the exact same geometry; only the colours change. The S strokes take the main colour, the cloud bowl takes the soft colour, and the logotype takes the ink colour.
 
 ## Files
-- `exports/pdf/` contains the A4 print boards. Print them at 100%.
-- `exports/svg/` contains the A4 boards, the final black and white logos, symbol-only marks, and 4 colour versions. All text is outlined. In the logo files, the strokes are grouped as `puff`, `arc`, `bowl` and `logotype`.
-- `exports/png/` contains the A4 boards at 300 dpi and 3000 px logo previews.
+- `exports/pdf/` contains both A4 boards. Print them at 100%.
+- `exports/svg/` contains:
+  - both boards
+  - the final black and white logos
+  - symbol-only marks
+  - the 4 colour logos
+  - black versions of all 4 alternatives
+  All text is outlined. In the logo files the strokes have IDs (`loop`, `puff`, `bowl`, `logotype`).
+- `exports/png/` contains both boards at 300 dpi and 3000 px logo previews.
+- `src/sketches/` holds the cropped pencil sketches used as thumbnails. They are the only raster images on the boards.
 
 ## Rebuild
 ```
-pip install cairosvg fonttools
+pip install cairosvg fonttools pillow
 python3 src/build.py
 ```
-Geometry lives in `src/symbol.py`. Edit the `SKETCH` and `FINAL` key points or the width profiles, then rebuild.
+The geometry lives in `src/symbol.py`: key points traced from each sketch, plus width profiles. Edit them, then rebuild.
